@@ -14,6 +14,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         sessions.put(session.getId(), session);
+        System.out.println("New Session started!  " + session.getId());
     }
 
     @Override
