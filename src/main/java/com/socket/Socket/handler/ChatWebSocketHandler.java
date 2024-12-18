@@ -29,4 +29,5 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, org.springframework.web.socket.CloseStatus status) {
         sessions.remove(session.getId());
     }
-} 
+}
+
