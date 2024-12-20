@@ -1,10 +1,11 @@
 package com.socket.Socket.service.impl;
 
+import com.socket.Socket.config.TwilioConfig;
 import com.socket.Socket.service.SMSService;
 import com.twilio.Twilio;
+import com.twilio.rest.verify.v2.Safelist;
 import com.twilio.rest.verify.v2.service.Verification;
 import com.twilio.rest.verify.v2.service.VerificationCheck;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,25 +15,23 @@ public class TwilioSMSService implements SMSService {
     
     private static final Logger logger = LoggerFactory.getLogger(TwilioSMSService.class);
     
-    @Value("${twilio.account.sid}")
-    private String accountSid;
+    private final TwilioConfig twilioConfig;
     
-    @Value("${twilio.auth.token}")
-    private String authToken;
-    
-    @Value("${twilio.verify.service.sid}")
-    private String verifyServiceSid;
+    public TwilioSMSService(TwilioConfig twilioConfig) {
+        this.twilioConfig = twilioConfig;
+    }
 
     @Override
     public void sendOTP(String phoneNumber) throws Exception {
         try {
-            logger.info("Initializing Twilio with SID: {}", accountSid);
+            logger.info("Initializing Twilio with SID: {}", twilioConfig.getAccountSid());
             logger.info("Attempting to send OTP to: +91{}", phoneNumber);
             
-            Twilio.init(accountSid, authToken);
+            Twilio.init(twilioConfig.getAccountSid(), twilioConfig.getAuthToken());
+//            Safelist safelist = Safelist.creator("+918200550414").create();
             
             Verification verification = Verification.creator(
-                verifyServiceSid,
+                twilioConfig.getVerifyServiceSid(),
                 "+91" + phoneNumber,
                 "sms"
             ).create();
@@ -51,12 +50,12 @@ public class TwilioSMSService implements SMSService {
     @Override
     public boolean verifyOTP(String phoneNumber, String code) throws Exception {
         try {
-            Twilio.init(accountSid, authToken);
+            Twilio.init(twilioConfig.getAccountSid(), twilioConfig.getAuthToken());
             
             logger.info("Verifying OTP for phone: {}, code: {}", phoneNumber, code);
             
             VerificationCheck verificationCheck = VerificationCheck.creator(
-                verifyServiceSid
+                twilioConfig.getVerifyServiceSid()
             )
             .setTo("+91" + phoneNumber)
             .setCode(code)
