@@ -81,4 +81,33 @@ public class GroupService {
         group.getMembers().remove(user);
         return groupRepository.save(group);
     }
+    
+    @Transactional
+    public Group addMembersToGroup(Long groupId, List<String> usernames, String addedBy) throws Exception {
+        Group group = getGroupById(groupId);
+        User adder = userRepository.findByUsername(addedBy)
+            .orElseThrow(() -> new Exception("User not found"));
+            
+        // Verify the adder is a member of the group
+        if (!group.getMembers().contains(adder)) {
+            throw new Exception("You must be a member of the group to add others");
+        }
+        
+        // Get all users to be added
+        List<User> usersToAdd = userRepository.findByUsernameIn(usernames);
+        
+        // Verify all usernames exist
+        if (usersToAdd.size() != usernames.size()) {
+            throw new Exception("One or more users not found");
+        }
+        
+        // Add all users to the group
+        for (User user : usersToAdd) {
+            if (!group.getMembers().contains(user)) {
+                group.getMembers().add(user);
+            }
+        }
+        
+        return groupRepository.save(group);
+    }
 }

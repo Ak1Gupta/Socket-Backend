@@ -6,13 +6,17 @@ import com.socket.Socket.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UserService {
     
     private final UserRepository userRepository;
     private final OTPRepository otpRepository;
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     
     public UserService(UserRepository userRepository, OTPRepository otpRepository) {
         this.userRepository = userRepository;
@@ -22,9 +26,12 @@ public class UserService {
     @Transactional
     public User createUser(String phoneNumber, String firstName, String lastName, String username) throws Exception {
         // Verify that OTP was validated - look for the most recent verified OTP
-        boolean isVerified = otpRepository.findTopByPhoneNumberOrderByExpiryTimeDesc(phoneNumber)
-                .map(otp -> otp.isVerified())
-                .orElse(false);
+        boolean isVerified = true;
+//                Without otp
+//                otpRepository.findTopByPhoneNumberOrderByExpiryTimeDesc(phoneNumber)
+//                .map(otp -> otp.isVerified())
+//                .orElse(false);
+
                 
         if (!isVerified) {
             throw new Exception("Phone number not verified");
@@ -59,5 +66,14 @@ public class UserService {
     
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
+    }
+    
+    public List<User> findRegisteredUsers(List<String> phoneNumbers) {
+        try {
+            return userRepository.findByPhoneNumberIn(phoneNumbers);
+        } catch (Exception e) {
+            logger.error("Error finding registered users: {}", e.getMessage());
+            return List.of(); // Return empty list instead of throwing
+        }
     }
 } 

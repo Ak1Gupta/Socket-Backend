@@ -47,6 +47,20 @@ public class MessageService {
         return messageRepository.save(message);
     }
     
+    @Transactional
+    public Message sendSystemMessage(Long groupId, String content) throws Exception {
+        Group group = groupRepository.findById(groupId)
+            .orElseThrow(() -> new Exception("Group not found"));
+            
+        Message message = new Message();
+        message.setContent(content);
+        message.setGroup(group);
+        message.setSentAt(LocalDateTime.now());
+        message.setType("SYSTEM");
+        
+        return messageRepository.save(message);
+    }
+    
     public List<Message> getGroupMessages(Long groupId) throws Exception {
         Group group = groupRepository.findById(groupId)
             .orElseThrow(() -> new Exception("Group not found"));

@@ -26,6 +26,9 @@ public class Message {
     
     @Column(nullable = false)
     private boolean isRead = false;
+    
+    @Column(nullable = false)
+    private String type = "CHAT";
 
     // Getters and Setters
     public Long getId() {
@@ -74,5 +77,13 @@ public class Message {
 
     public void setRead(boolean read) {
         isRead = read;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 }
