@@ -4,6 +4,7 @@ import com.socket.Socket.model.Group;
 import com.socket.Socket.model.User;
 import com.socket.Socket.repository.GroupRepository;
 import com.socket.Socket.repository.UserRepository;
+import com.socket.Socket.repository.MessageRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -14,10 +15,12 @@ public class GroupService {
     
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
+    private final MessageRepository messageRepository;
     
-    public GroupService(GroupRepository groupRepository, UserRepository userRepository) {
+    public GroupService(GroupRepository groupRepository, UserRepository userRepository, MessageRepository messageRepository) {
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
+        this.messageRepository = messageRepository;
     }
     
     @Transactional
@@ -109,5 +112,16 @@ public class GroupService {
         }
         
         return groupRepository.save(group);
+    }
+    
+    @Transactional
+    public void deleteGroup(Long groupId) throws Exception {
+        Group group = getGroupById(groupId);
+        
+        // Delete all messages first
+        messageRepository.deleteByGroup(group);
+        
+        // Delete the group
+        groupRepository.delete(group);
     }
 }

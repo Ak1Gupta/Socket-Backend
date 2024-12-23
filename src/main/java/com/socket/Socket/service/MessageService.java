@@ -6,13 +6,20 @@ import com.socket.Socket.model.User;
 import com.socket.Socket.repository.MessageRepository;
 import com.socket.Socket.repository.GroupRepository;
 import com.socket.Socket.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class MessageService {
+    private static final Logger logger = LoggerFactory.getLogger(MessageService.class);
     
     private final MessageRepository messageRepository;
     private final GroupRepository groupRepository;
@@ -24,6 +31,50 @@ public class MessageService {
         this.messageRepository = messageRepository;
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
+    }
+    
+    @Transactional
+    public Message saveMessage(JsonNode jsonNode) throws Exception {
+        try {
+            String type = jsonNode.get("type").asText();
+            Long groupId = jsonNode.get("groupId").asLong();
+            String content = jsonNode.get("content").asText();
+            
+            logger.info("Saving message - Type: {}, GroupId: {}, Content: {}", type, groupId, content);
+            
+            Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new Exception("Group not found"));
+                
+            Message message = new Message();
+            message.setContent(content);
+            message.setGroup(group);
+            message.setSentAt(LocalDateTime.now());
+            message.setType(type);
+            
+            if ("CHAT".equals(type)) {
+                String senderUsername = jsonNode.get("sender").asText();
+                logger.info("Message sender: {}", senderUsername);
+                
+                User sender = userRepository.findByUsername(senderUsername)
+                    .orElseThrow(() -> new Exception("User not found"));
+                    
+                if (!group.getMembers().contains(sender)) {
+                    throw new Exception("User is not a member of this group");
+                }
+                
+                message.setSender(sender);
+            } else {
+                message.setSender(null);
+                message.setRead(true);
+            }
+            
+            Message savedMessage = messageRepository.save(message);
+            logger.info("Message saved successfully with ID: {}", savedMessage.getId());
+            return savedMessage;
+        } catch (Exception e) {
+            logger.error("Error saving message: {}", e.getMessage(), e);
+            throw e;
+        }
     }
     
     @Transactional
@@ -57,14 +108,47 @@ public class MessageService {
         message.setGroup(group);
         message.setSentAt(LocalDateTime.now());
         message.setType("SYSTEM");
+        message.setSender(null);
+        message.setRead(true);
         
         return messageRepository.save(message);
     }
     
-    public List<Message> getGroupMessages(Long groupId) throws Exception {
-        Group group = groupRepository.findById(groupId)
-            .orElseThrow(() -> new Exception("Group not found"));
+    public List<Map<String, Object>> getGroupMessages(Long groupId, String username) throws Exception {
+        try {
+            Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new Exception("Group not found"));
+                
+            User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new Exception("User not found"));
+                
+            // Verify user is member of the group
+            if (!group.getMembers().contains(user)) {
+                throw new Exception("User is not a member of this group");
+            }
             
-        return messageRepository.findByGroupOrderBySentAtDesc(group);
+            logger.info("Fetching messages for group: {}, user: {}", groupId, username);
+            List<Message> messages = messageRepository.findByGroupOrderBySentAtDesc(group);
+            
+            // Convert messages to DTOs with just the username for sender
+            List<Map<String, Object>> messageDTOs = messages.stream()
+                .map(message -> {
+                    Map<String, Object> dto = new HashMap<>();
+                    dto.put("id", message.getId());
+                    dto.put("content", message.getContent());
+                    dto.put("sender", message.getSender() != null ? message.getSender().getUsername() : null);
+                    dto.put("type", message.getType());
+                    dto.put("timestamp", message.getSentAt().toString());
+                    dto.put("groupId", message.getGroup().getId());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+            
+            logger.info("Found {} messages", messages.size());
+            return messageDTOs;
+        } catch (Exception e) {
+            logger.error("Error fetching group messages: ", e);
+            throw e;
+        }
     }
 } 

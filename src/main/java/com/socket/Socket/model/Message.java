@@ -1,6 +1,7 @@
 package com.socket.Socket.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
@@ -13,12 +14,14 @@ public class Message {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sender_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "sender_id", nullable = true)
+    @JsonIgnoreProperties({"groups", "messages"})
     private User sender;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "group_id", nullable = false)
+    @JsonIgnoreProperties({"members", "messages"})
     private Group group;
     
     @Column(nullable = false)

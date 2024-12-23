@@ -24,11 +24,25 @@ public class TwilioSMSService implements SMSService {
     @Override
     public void sendOTP(String phoneNumber) throws Exception {
         try {
-            logger.info("Initializing Twilio with SID: {}", twilioConfig.getAccountSid());
-            logger.info("Attempting to send OTP to: +91{}", phoneNumber);
+            logger.info("Initializing Twilio with Account SID: {}", twilioConfig.getAccountSid());
             
+            if (twilioConfig.getAccountSid() == null || twilioConfig.getAccountSid().isEmpty()) {
+                throw new Exception("Twilio Account SID is not configured");
+            }
+            
+            if (twilioConfig.getAuthToken() == null || twilioConfig.getAuthToken().isEmpty()) {
+                throw new Exception("Twilio Auth Token is not configured");
+            }
+            
+            if (twilioConfig.getVerifyServiceSid() == null || twilioConfig.getVerifyServiceSid().isEmpty()) {
+                throw new Exception("Twilio Verify Service SID is not configured");
+            }
+
             Twilio.init(twilioConfig.getAccountSid(), twilioConfig.getAuthToken());
+
 //            Safelist safelist = Safelist.creator("+918200550414").create();
+
+            System.out.println("SERVICE IDD: " + twilioConfig.getVerifyServiceSid());
             
             Verification verification = Verification.creator(
                 twilioConfig.getVerifyServiceSid(),
@@ -42,7 +56,7 @@ public class TwilioSMSService implements SMSService {
                 throw new Exception("Failed to send verification code. Status: " + verification.getStatus());
             }
         } catch (Exception e) {
-            logger.error("Error sending OTP: {}", e.getMessage(), e);
+            logger.error("Error sending OTP: {}", e.getMessage());
             throw new Exception("Failed to send OTP: " + e.getMessage());
         }
     }

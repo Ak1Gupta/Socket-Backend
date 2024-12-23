@@ -14,33 +14,19 @@ import java.util.List;
 @CrossOrigin
 public class MessageController {
     
-    private static final Logger logger = LoggerFactory.getLogger(MessageController.class);
     private final MessageService messageService;
+    private static final Logger logger = LoggerFactory.getLogger(MessageController.class);
     
     public MessageController(MessageService messageService) {
         this.messageService = messageService;
     }
     
-    @PostMapping
-    public ResponseEntity<?> sendMessage(@RequestBody Map<String, String> request) {
+    @GetMapping("/group/{groupId}")
+    public ResponseEntity<?> getGroupMessages(
+            @PathVariable Long groupId,
+            @RequestParam String username) {
         try {
-            String content = request.get("content");
-            Long groupId = Long.parseLong(request.get("groupId"));
-            String senderUsername = request.get("senderUsername");
-            
-            Message message = messageService.sendMessage(content, groupId, senderUsername);
-            return ResponseEntity.ok(message);
-        } catch (Exception e) {
-            logger.error("Error sending message: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                .body(Map.of("error", e.getMessage()));
-        }
-    }
-    
-    @GetMapping("/{groupId}")
-    public ResponseEntity<?> getGroupMessages(@PathVariable Long groupId) {
-        try {
-            List<Message> messages = messageService.getGroupMessages(groupId);
+            List<Map<String, Object>> messages = messageService.getGroupMessages(groupId, username);
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             logger.error("Error fetching messages: {}", e.getMessage());

@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByGroupOrderBySentAtDesc(Group group);
+    void deleteByGroup(Group group);
 }

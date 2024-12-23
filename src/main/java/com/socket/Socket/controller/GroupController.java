@@ -5,6 +5,7 @@ import com.socket.Socket.model.User;
 import com.socket.Socket.service.GroupService;
 import com.socket.Socket.service.MessageService;
 import com.socket.Socket.service.UserService;
+import com.socket.Socket.websocket.WebSocketHandler;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
@@ -22,11 +23,13 @@ public class GroupController {
     private final GroupService groupService;
     private final MessageService messageService;
     private final UserService userService;
+    private final WebSocketHandler webSocketHandler;
     
-    public GroupController(GroupService groupService, MessageService messageService, UserService userService) {
+    public GroupController(GroupService groupService, MessageService messageService, UserService userService, WebSocketHandler webSocketHandler) {
         this.groupService = groupService;
         this.messageService = messageService;
         this.userService = userService;
+        this.webSocketHandler = webSocketHandler;
     }
     
     @PostMapping
@@ -82,14 +85,14 @@ public class GroupController {
             
             Group group = groupService.addMembersToGroup(groupId, usernames, addedBy);
             
-            // Send system message about new members
-            messageService.sendSystemMessage(
-                groupId,
-                String.format("%s added %s to the group",
-                    addedBy,
-                    String.join(", ", usernames)
-                )
+            // Create system message
+            String systemMessage = String.format("%s added %s to the group",
+                addedBy,
+                String.join(", ", usernames)
             );
+            
+            // Only broadcast - it will handle saving internally
+            webSocketHandler.broadcastSystemMessage(groupId, systemMessage);
             
             return ResponseEntity.ok(group);
         } catch (Exception e) {
@@ -111,6 +114,18 @@ public class GroupController {
             return ResponseEntity.ok(Map.of("users", registeredUsers));
         } catch (Exception e) {
             logger.error("Error checking contacts: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    @DeleteMapping("/{groupId}")
+    public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
+        try {
+            groupService.deleteGroup(groupId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Error deleting group: {}", e.getMessage());
             return ResponseEntity.badRequest()
                 .body(Map.of("error", e.getMessage()));
         }

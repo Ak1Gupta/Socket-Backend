@@ -23,7 +23,7 @@ public class AuthService {
     @Transactional
     public void sendOTP(String phoneNumber) throws Exception {
         logger.info("Starting OTP send process for phone number: {}", phoneNumber);
-        
+
         try {
             // Delete any existing verification records
             otpRepository.deleteByPhoneNumberAndIsVerifiedFalse(phoneNumber);
@@ -36,7 +36,9 @@ public class AuthService {
             otpRepository.save(otpEntity);
             
             // Send OTP via Twilio
+            System.out.println("OTPPPPPP1");
             smsService.sendOTP(phoneNumber);
+            System.out.println("OTPPPPPP2");
             logger.info("OTP sent successfully");
         } catch (Exception e) {
             logger.error("Failed to process OTP request: {}", e.getMessage());

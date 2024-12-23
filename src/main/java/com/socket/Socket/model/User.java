@@ -1,10 +1,13 @@
 package com.socket.Socket.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
+import java.util.Set;
 
 @Entity
 @Table(name = "users", schema = "public")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,6 +39,10 @@ public class User {
 
     @Column
     private String status;
+
+    @JsonIgnoreProperties({"members", "createdBy"})
+    @ManyToMany(mappedBy = "members")
+    private Set<Group> groups;
 
     // Getters and Setters
     public Long getId() {

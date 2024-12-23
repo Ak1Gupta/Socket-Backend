@@ -28,7 +28,9 @@ public class AuthController {
     @PostMapping("/send-otp")
     public ResponseEntity<?> sendOTP(@RequestBody Map<String, String> request) {
         try {
+
             String phoneNumber = request.get("phoneNumber");
+
             logger.info("Received OTP request for phone number: {}", phoneNumber);
             
             if (phoneNumber == null || phoneNumber.trim().isEmpty()) {

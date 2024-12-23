@@ -26,11 +26,14 @@ public class UserService {
     @Transactional
     public User createUser(String phoneNumber, String firstName, String lastName, String username) throws Exception {
         // Verify that OTP was validated - look for the most recent verified OTP
-        boolean isVerified = true;
-//                Without otp
+        boolean isVerified =
 //                otpRepository.findTopByPhoneNumberOrderByExpiryTimeDesc(phoneNumber)
 //                .map(otp -> otp.isVerified())
 //                .orElse(false);
+                //Without OTP
+                true;
+//                With otp
+
 
                 
         if (!isVerified) {

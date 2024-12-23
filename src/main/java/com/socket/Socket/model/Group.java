@@ -1,6 +1,8 @@
 package com.socket.Socket.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -18,11 +20,11 @@ public class Group {
     @Column(nullable = false)
     private LocalDateTime createdAt;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
     
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "group_members",
         joinColumns = @JoinColumn(name = "group_id"),
