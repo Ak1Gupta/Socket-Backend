@@ -36,9 +36,9 @@ public class AuthService {
             otpRepository.save(otpEntity);
             
             // Send OTP via Twilio
-            System.out.println("OTPPPPPP1");
+
             smsService.sendOTP(phoneNumber);
-            System.out.println("OTPPPPPP2");
+
             logger.info("OTP sent successfully");
         } catch (Exception e) {
             logger.error("Failed to process OTP request: {}", e.getMessage());
