@@ -24,10 +24,16 @@ public class MessageController {
     @GetMapping("/group/{groupId}")
     public ResponseEntity<?> getGroupMessages(
             @PathVariable Long groupId,
-            @RequestParam String username) {
+            @RequestParam String username,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int limit) {
         try {
-            List<Map<String, Object>> messages = messageService.getGroupMessages(groupId, username);
-            return ResponseEntity.ok(messages);
+            // Validate and sanitize input
+            page = Math.max(1, page);
+            limit = Math.min(50, Math.max(1, limit)); // Cap at 50 messages per request
+            
+            Map<String, Object> response = messageService.getGroupMessages(groupId, username, page, limit);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error fetching messages: {}", e.getMessage());
             return ResponseEntity.badRequest()

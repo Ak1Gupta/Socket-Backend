@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class MessageService {
@@ -114,7 +116,7 @@ public class MessageService {
         return messageRepository.save(message);
     }
     
-    public List<Map<String, Object>> getGroupMessages(Long groupId, String username) throws Exception {
+    public Map<String, Object> getGroupMessages(Long groupId, String username, int page, int limit) throws Exception {
         try {
             Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new Exception("Group not found"));
@@ -127,10 +129,18 @@ public class MessageService {
                 throw new Exception("User is not a member of this group");
             }
             
-            logger.info("Fetching messages for group: {}, user: {}", groupId, username);
-            List<Message> messages = messageRepository.findByGroupOrderBySentAtDesc(group);
+            // Create pageable object
+            Pageable pageable = PageRequest.of(page - 1, limit);
             
-            // Convert messages to DTOs with just the username for sender
+            // Get total count of messages
+            long totalMessages = messageRepository.countByGroup(group);
+            
+            logger.info("Fetching messages for group: {}, user: {}, page: {}, limit: {}", 
+                groupId, username, page, limit);
+                
+            List<Message> messages = messageRepository.findByGroupOrderBySentAtDesc(group, pageable);
+            
+            // Convert messages to DTOs
             List<Map<String, Object>> messageDTOs = messages.stream()
                 .map(message -> {
                     Map<String, Object> dto = new HashMap<>();
@@ -144,8 +154,22 @@ public class MessageService {
                 })
                 .collect(Collectors.toList());
             
-            logger.info("Found {} messages", messages.size());
-            return messageDTOs;
+            // Calculate pagination metadata
+            int totalPages = (int) Math.ceil((double) totalMessages / limit);
+            boolean hasMore = page * limit < totalMessages;
+            
+            // Create response map
+            Map<String, Object> response = new HashMap<>();
+            response.put("messages", messageDTOs);
+            response.put("hasMore", hasMore);
+            response.put("total", totalMessages);
+            response.put("currentPage", page);
+            response.put("totalPages", totalPages);
+            
+            logger.info("Found {} messages, total: {}, hasMore: {}", 
+                messages.size(), totalMessages, hasMore);
+                
+            return response;
         } catch (Exception e) {
             logger.error("Error fetching group messages: ", e);
             throw e;

@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "messages", schema = "public")
+@Table(name = "messages", schema = "public", indexes = {
+    @Index(name = "idx_message_group_sentat", columnList = "group_id,sent_at DESC")
+})
 public class Message {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
