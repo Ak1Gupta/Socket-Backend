@@ -3,11 +3,13 @@ package com.socket.Socket.model;
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 @Entity
 @Table(name = "messages", schema = "public", indexes = {
     @Index(name = "idx_message_group_sentat", columnList = "group_id,sent_at DESC")
 })
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Message {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,6 +28,7 @@ public class Message {
     @JsonIgnoreProperties({"members", "messages"})
     private Group group;
     
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     @Column(nullable = false)
     private LocalDateTime sentAt;
     

@@ -6,7 +6,9 @@ import com.socket.Socket.model.User;
 import com.socket.Socket.repository.MessageRepository;
 import com.socket.Socket.repository.GroupRepository;
 import com.socket.Socket.repository.UserRepository;
+import com.socket.Socket.repository.MessageBatchRepository;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,22 +19,73 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import java.util.ArrayList;
+import com.socket.Socket.model.MessageBatch;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 @Service
 public class MessageService {
     private static final Logger logger = LoggerFactory.getLogger(MessageService.class);
+    private static final int BATCH_SIZE = 10;
     
     private final MessageRepository messageRepository;
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
+    private final MessageBatchRepository messageBatchRepository;
+    private final ObjectMapper objectMapper;
     
     public MessageService(MessageRepository messageRepository, 
                          GroupRepository groupRepository,
-                         UserRepository userRepository) {
+                         UserRepository userRepository,
+                         MessageBatchRepository messageBatchRepository) {
         this.messageRepository = messageRepository;
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
+        this.messageBatchRepository = messageBatchRepository;
+        
+        // Configure ObjectMapper with JSR310 module
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
+    
+    private void checkAndProcessBatch(Group group) {
+        try {
+            long messageCount = messageRepository.countByGroup(group);
+            
+            if (messageCount >= BATCH_SIZE) {
+                logger.info("Found {} messages for group {}, creating batch", messageCount, group.getId());
+                
+                // Get the oldest BATCH_SIZE messages for this group
+                List<Message> messages = messageRepository.findOldestMessages(
+                    group, 
+                    PageRequest.of(0, BATCH_SIZE)
+                );
+                
+                if (!messages.isEmpty()) {
+                    Integer lastBatchNumber = messageBatchRepository.findMaxBatchNumberByGroup(group);
+                    int newBatchNumber = (lastBatchNumber == null) ? 1 : lastBatchNumber + 1;
+                    
+                    MessageBatch batch = new MessageBatch();
+                    batch.setGroup(group);
+                    batch.setCreatedAt(LocalDateTime.now());
+                    batch.setBatchNumber(newBatchNumber);
+                    batch.setMessages(objectMapper.writeValueAsString(messages));
+                    
+                    // Save batch first
+                    messageBatchRepository.save(batch);
+                    
+                    // Then delete the messages that were batched
+                    messageRepository.deleteAll(messages);
+                    
+                    logger.info("Created batch {} with {} messages for group {}", 
+                        newBatchNumber, messages.size(), group.getId());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error processing message batch: ", e);
+        }
     }
     
     @Transactional
@@ -72,6 +125,9 @@ public class MessageService {
             
             Message savedMessage = messageRepository.save(message);
             logger.info("Message saved successfully with ID: {}", savedMessage.getId());
+            
+            checkAndProcessBatch(savedMessage.getGroup());
+            
             return savedMessage;
         } catch (Exception e) {
             logger.error("Error saving message: {}", e.getMessage(), e);
@@ -124,55 +180,73 @@ public class MessageService {
             User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new Exception("User not found"));
                 
-            // Verify user is member of the group
             if (!group.getMembers().contains(user)) {
                 throw new Exception("User is not a member of this group");
             }
             
-            // Create pageable object
-            Pageable pageable = PageRequest.of(page - 1, limit);
+            List<Map<String, Object>> allMessages = new ArrayList<>();
             
-            // Get total count of messages
-            long totalMessages = messageRepository.countByGroup(group);
+            // First get messages from the message table
+            List<Message> currentMessages = messageRepository.findByGroupOrderBySentAtDesc(
+                group,
+                PageRequest.of(0, limit)
+            );
             
-            logger.info("Fetching messages for group: {}, user: {}, page: {}, limit: {}", 
-                groupId, username, page, limit);
+            allMessages.addAll(convertMessagesToDTO(currentMessages));
+            
+            // If we need more messages, get from batches
+            if (allMessages.size() < limit) {
+                int remainingCount = limit - allMessages.size();
+                int batchPage = page - 1; // Adjust page for batches
                 
-            List<Message> messages = messageRepository.findByGroupOrderBySentAtDesc(group, pageable);
+                if (batchPage >= 0) {
+                    List<MessageBatch> batches = messageBatchRepository.findByGroupOrderByBatchNumberDesc(
+                        group,
+                        PageRequest.of(batchPage, 1)
+                    );
+                    
+                    for (MessageBatch batch : batches) {
+                        List<Message> batchMessages = objectMapper.readValue(
+                            batch.getMessages(),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, Message.class)
+                        );
+                        
+                        allMessages.addAll(convertMessagesToDTO(batchMessages));
+                        
+                        if (allMessages.size() >= limit) {
+                            break;
+                        }
+                    }
+                }
+            }
             
-            // Convert messages to DTOs
-            List<Map<String, Object>> messageDTOs = messages.stream()
-                .map(message -> {
-                    Map<String, Object> dto = new HashMap<>();
-                    dto.put("id", message.getId());
-                    dto.put("content", message.getContent());
-                    dto.put("sender", message.getSender() != null ? message.getSender().getUsername() : null);
-                    dto.put("type", message.getType());
-                    dto.put("timestamp", message.getSentAt().toString());
-                    dto.put("groupId", message.getGroup().getId());
-                    return dto;
-                })
-                .collect(Collectors.toList());
+            // Check if there are more messages or batches
+            boolean hasMore = messageRepository.countByGroup(group) > 0 || 
+                             messageBatchRepository.countByGroup(group) > page;
             
-            // Calculate pagination metadata
-            int totalPages = (int) Math.ceil((double) totalMessages / limit);
-            boolean hasMore = page * limit < totalMessages;
-            
-            // Create response map
             Map<String, Object> response = new HashMap<>();
-            response.put("messages", messageDTOs);
+            response.put("messages", allMessages.subList(0, Math.min(limit, allMessages.size())));
             response.put("hasMore", hasMore);
-            response.put("total", totalMessages);
-            response.put("currentPage", page);
-            response.put("totalPages", totalPages);
             
-            logger.info("Found {} messages, total: {}, hasMore: {}", 
-                messages.size(), totalMessages, hasMore);
-                
             return response;
         } catch (Exception e) {
             logger.error("Error fetching group messages: ", e);
             throw e;
         }
+    }
+    
+    private List<Map<String, Object>> convertMessagesToDTO(List<Message> messages) {
+        return messages.stream()
+            .map(message -> {
+                Map<String, Object> dto = new HashMap<>();
+                dto.put("id", message.getId());
+                dto.put("content", message.getContent());
+                dto.put("sender", message.getSender() != null ? message.getSender().getUsername() : null);
+                dto.put("type", message.getType());
+                dto.put("timestamp", message.getSentAt().toString());
+                dto.put("groupId", message.getGroup().getId());
+                return dto;
+            })
+            .collect(Collectors.toList());
     }
 } 
