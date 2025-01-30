@@ -58,10 +58,7 @@ public class MessageService {
                 logger.info("Found {} messages for group {}, creating batch", messageCount, group.getId());
                 
                 // Get the oldest BATCH_SIZE messages for this group
-                List<Message> messages = messageRepository.findOldestMessages(
-                    group, 
-                    PageRequest.of(0, BATCH_SIZE)
-                );
+                List<Message> messages = messageRepository.findOldestMessages(group);
                 
                 if (!messages.isEmpty()) {
                     Integer lastBatchNumber = messageBatchRepository.findMaxBatchNumberByGroup(group);
@@ -176,57 +173,109 @@ public class MessageService {
         try {
             Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new Exception("Group not found"));
-                
+            
             User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new Exception("User not found"));
-                
+            
             if (!group.getMembers().contains(user)) {
                 throw new Exception("User is not a member of this group");
             }
             
             List<Map<String, Object>> allMessages = new ArrayList<>();
             
-            // First get messages from the message table
-            List<Message> currentMessages = messageRepository.findByGroupOrderBySentAtDesc(
-                group,
-                PageRequest.of(0, limit)
-            );
+            // Calculate total messages (both current and batched)
+            long currentMessagesCount = messageRepository.countByGroup(group);
+            long batchCount = messageBatchRepository.countByGroup(group);
+            long totalMessages = currentMessagesCount + (batchCount * BATCH_SIZE);
             
-            allMessages.addAll(convertMessagesToDTO(currentMessages));
+            logger.info("Page: {}, Current messages: {}, Batch count: {}, Total: {}", 
+                page, currentMessagesCount, batchCount, totalMessages);
             
-            // If we need more messages, get from batches
-            if (allMessages.size() < limit) {
-                int remainingCount = limit - allMessages.size();
-                int batchPage = page - 1; // Adjust page for batches
+            // For page 1, get current messages first
+            if (page == 1) {
+                if (currentMessagesCount > 0) {
+                    List<Message> currentMessages = messageRepository.findByGroupOrderBySentAtDesc(
+                        group
+//                            ,
+//                        PageRequest.of(0, Math.min(limit, (int)currentMessagesCount))
+                    );
+                    allMessages.addAll(convertMessagesToDTO(currentMessages));
+                    logger.info("Added {} current messages", currentMessages.size());
+                }
                 
-                if (batchPage >= 0) {
+                // If we need more messages for page 1, get from most recent batch
+                if (allMessages.size() < limit && batchCount > 0) {
                     List<MessageBatch> batches = messageBatchRepository.findByGroupOrderByBatchNumberDesc(
                         group,
-                        PageRequest.of(batchPage, 1)
+                        PageRequest.of(0, 1)
                     );
                     
-                    for (MessageBatch batch : batches) {
+                    if (!batches.isEmpty()) {
+                        MessageBatch batch = batches.get(0);
                         List<Message> batchMessages = objectMapper.readValue(
                             batch.getMessages(),
                             objectMapper.getTypeFactory().constructCollectionType(List.class, Message.class)
                         );
-                        
+                        batchMessages.sort((a, b) -> b.getSentAt().compareTo(a.getSentAt()));
                         allMessages.addAll(convertMessagesToDTO(batchMessages));
-                        
-                        if (allMessages.size() >= limit) {
-                            break;
-                        }
+                        logger.info("Added {} messages from most recent batch {}", 
+                            batchMessages.size(), batch.getBatchNumber());
+                    }
+                }
+            } else {
+                // For subsequent pages, calculate which batch to fetch
+                int batchesNeeded = (page - 1);
+                if (currentMessagesCount > 0) batchesNeeded--;
+                
+                if (batchesNeeded >= 0 && batchCount > 0) {
+                    List<MessageBatch> batches = messageBatchRepository.findByGroupOrderByBatchNumberDesc(
+                        group,
+                        PageRequest.of(batchesNeeded, 1)
+                    );
+                    
+                    if (!batches.isEmpty()) {
+                        MessageBatch batch = batches.get(0);
+                        List<Message> batchMessages = objectMapper.readValue(
+                            batch.getMessages(),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, Message.class)
+                        );
+                        batchMessages.sort((a, b) -> b.getSentAt().compareTo(a.getSentAt()));
+                        allMessages.addAll(convertMessagesToDTO(batchMessages));
+                        logger.info("Added {} messages from batch {} for page {}", 
+                            batchMessages.size(), batch.getBatchNumber(), page);
                     }
                 }
             }
             
-            // Check if there are more messages or batches
-            boolean hasMore = messageRepository.countByGroup(group) > 0 || 
-                             messageBatchRepository.countByGroup(group) > page;
+            // Sort all messages by timestamp
+            allMessages.sort((a, b) -> {
+                LocalDateTime timeA = LocalDateTime.parse((String)a.get("timestamp"));
+                LocalDateTime timeB = LocalDateTime.parse((String)b.get("timestamp"));
+                return timeB.compareTo(timeA);
+            });
+            
+            // Take only the required number of messages
+            int toIndex = Math.min(limit, allMessages.size());
+            List<Map<String, Object>> paginatedMessages = 
+                allMessages.subList(0, toIndex);
+            
+            // Calculate if there are more messages
+            boolean hasMore;
+            if (page == 1) {
+                hasMore = (currentMessagesCount > limit) || (batchCount > 0 && allMessages.size() >= limit);
+            } else {
+                int batchesNeeded = page - (currentMessagesCount > 0 ? 1 : 0);
+                hasMore = batchCount > batchesNeeded;
+            }
+            
+            logger.info("Returning {} messages, hasMore: {}, page: {}", 
+                paginatedMessages.size(), hasMore, page);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("messages", allMessages.subList(0, Math.min(limit, allMessages.size())));
+            response.put("messages", paginatedMessages);
             response.put("hasMore", hasMore);
+            response.put("totalMessages", totalMessages);
+            response.put("currentPage", page);
             
             return response;
         } catch (Exception e) {

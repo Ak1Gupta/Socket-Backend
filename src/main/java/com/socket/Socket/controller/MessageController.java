@@ -26,11 +26,11 @@ public class MessageController {
             @PathVariable Long groupId,
             @RequestParam String username,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int limit) {
+            @RequestParam(defaultValue = "10") int limit) {
         try {
 
             page = Math.max(1, page);
-            limit = Math.min(50, Math.max(1, limit));
+            limit = Math.min(10, Math.max(1, limit));
             
             Map<String, Object> response = messageService.getGroupMessages(groupId, username, page, limit);
             return ResponseEntity.ok(response);

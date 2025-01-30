@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
-    List<Message> findByGroupOrderBySentAtDesc(Group group, Pageable pageable);
+    List<Message> findByGroupOrderBySentAtDesc(Group group);
     
     // Replace the problematic method with either:
     // Option 1: Using method name
@@ -17,7 +17,9 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     
     // OR Option 2: Using @Query annotation (preferred)
     @Query("SELECT m FROM Message m WHERE m.group = :group ORDER BY m.sentAt ASC")
-    List<Message> findOldestMessages(@Param("group") Group group, Pageable pageable);
+    List<Message> findOldestMessages(@Param("group") Group group
+//            , Pageable pageable
+    );
     
     void deleteByGroup(Group group);
     long countByGroup(Group group);
